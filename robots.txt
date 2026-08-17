@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://tinhcalo-vietnam.vercel.app/sitemap.xml
