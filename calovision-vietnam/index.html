@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CaloVision - Phân Tích & Định Lượng Dinh Dưỡng Thực Phẩm Việt Nam</title>
+  <meta name="description" content="Hệ thống định lượng calo món ăn qua ảnh và mô tả bằng AI. Phân tách thành phần nguyên liệu, tính TDEE/BMR và nhật ký dinh dưỡng chuẩn y khoa.">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Custom Style -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-container">
+      <a href="index.html" class="logo">
+        <i class="fa-solid fa-heart-pulse logo-icon"></i>
+        <span>Calo<span class="logo-highlight">Vision</span></span>
+      </a>
+      
+      <nav class="nav-toolbar">
+        <a href="#calculator-section" class="nav-item active"><i class="fa-solid fa-scale-balanced"></i> Định Lượng Calo</a>
+        <a href="#tdee-section" class="nav-item"><i class="fa-solid fa-calculator"></i> Tính Calo Nhu Cầu</a>
+        <a href="#diary-section" class="nav-item"><i class="fa-solid fa-book-medical"></i> Sổ Tay Dinh Dưỡng</a>
+        <a href="cam-nang/index.html" class="nav-item"><i class="fa-solid fa-newspaper"></i> Cẩm Nang Ăn Khỏe</a>
+      </nav>
+
+      <div class="header-right">
+        <div class="daily-tracker-summary" id="header-tracker">
+          <i class="fa-solid fa-fire"></i>
+          <span>Hôm nay: <strong id="total-calories-header">0</strong> / <span id="target-calories-header">2000</span> kcal</span>
+        </div>
+        <button class="settings-btn" id="open-settings" title="Cấu hình API Key">
+          <i class="fa-solid fa-gear"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <div class="main-layout-container">
+    
+    <!-- Healthy Lifestyle Banner -->
+    <div class="healthy-banner-container">
+      <img src="https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=1200&q=80" alt="Lối sống lành mạnh" class="healthy-banner-img">
+      <div class="healthy-banner-overlay">
+        <h2>Sức Khỏe Bắt Đầu Từ Sự Thấu Hiểu Dinh Dưỡng</h2>
+        <p>Mỗi bữa ăn là một viên gạch xây dựng sức đề kháng cơ thể. Hãy chủ động kiểm soát năng lượng nạp vào khoa học.</p>
+      </div>
+    </div>
+
+    <!-- Intro -->
+    <div class="tool-intro">
+      <h1>Phân Tích & Định Lượng Dinh Dưỡng Thực Phẩm</h1>
+      <p>Hệ thống tự động đối chiếu dữ liệu hình ảnh hoặc thông tin mô tả với Cơ sở Dữ liệu Dinh dưỡng Quốc gia và USDA.</p>
+    </div>
+
+    <!-- Food Calorie Calculator Card -->
+    <div class="calculator-card" id="calculator-section">
+      <!-- Input Tabs -->
+      <div class="calculator-tabs">
+        <button class="tab-btn active" id="tab-image-btn" onclick="switchTab('image')">
+          <i class="fa-solid fa-camera"></i> Quét Ảnh Món Ăn
+        </button>
+        <button class="tab-btn" id="tab-text-btn" onclick="switchTab('text')">
+          <i class="fa-solid fa-keyboard"></i> Nhập Thông Tin / Mô Tả
+        </button>
+      </div>
+
+      <div class="calculator-body">
+        <!-- Tab 1: Image Mode -->
+        <div class="tab-content" id="image-tab">
+          <div class="upload-zone" id="drop-zone">
+            <input type="file" id="file-input" accept="image/*" style="display: none;">
+            <input type="file" id="camera-input" accept="image/*" capture="environment" style="display: none;">
+            
+            <div class="upload-prompt" id="upload-prompt">
+              <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+              <h3>Kéo thả ảnh thực phẩm vào đây</h3>
+              <p>hoặc nhấn để chọn ảnh từ thiết bị</p>
+              <div class="upload-buttons">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="triggerFileInput('file-input')">
+                  <i class="fa-solid fa-file-image"></i> Chọn ảnh
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="triggerFileInput('camera-input')">
+                  <i class="fa-solid fa-camera"></i> Chụp ảnh món ăn
+                </button>
+              </div>
+            </div>
+
+            <!-- Image Preview -->
+            <div class="image-preview-container" id="preview-container" style="display: none;">
+              <img id="image-preview" src="" alt="Xem trước món ăn">
+              <button type="button" class="remove-preview-btn" onclick="removeImage()">
+                <i class="fa-solid fa-xmark"></i> Hủy ảnh
+              </button>
+            </div>
+          </div>
+          
+          <div class="input-group">
+            <label for="image-context"><i class="fa-solid fa-pen-nib"></i> Ghi chú thêm về khẩu phần (Không bắt buộc)</label>
+            <input type="text" id="image-context" placeholder="Ví dụ: Bát phở này cỡ lớn, ăn khoảng nửa bát...">
+          </div>
+        </div>
+
+        <!-- Tab 2: Text Mode -->
+        <div class="tab-content" id="text-tab" style="display: none;">
+          <div class="input-group">
+            <label for="text-query"><i class="fa-solid fa-clipboard-question"></i> Nhập danh sách hoặc mô tả món ăn</label>
+            <textarea id="text-query" rows="4" placeholder="Ví dụ: Sáng nay tôi ăn 1 bát cơm tấm sườn trứng ốp la và uống 1 cốc cà phê sữa đá. Tính giúp tôi tổng lượng calo."></textarea>
+          </div>
+        </div>
+
+        <!-- Quick Select Buttons -->
+        <div style="margin-top: 1.25rem;">
+          <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 0.5rem;">
+            <i class="fa-solid fa-bolt"></i> Chọn nhanh món ăn Việt Nam phổ biến:
+          </label>
+          <div class="quick-click-grid" style="grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));">
+            <button class="quick-food-btn" onclick="quickSelect('Phở bò tái')">🍜 Phở Bò Tái</button>
+            <button class="quick-food-btn" onclick="quickSelect('Bún chả Hà Nội')">🍜 Bún Chả Hà Nội</button>
+            <button class="quick-food-btn" onclick="quickSelect('Cơm tấm sườn nướng')">🍛 Cơm Tấm Sườn</button>
+            <button class="quick-food-btn" onclick="quickSelect('Bánh mì thịt xá xíu')">🥖 Bánh Mì Thịt</button>
+            <button class="quick-food-btn" onclick="quickSelect('Bún riêu cua đậu rán')">🍜 Bún Riêu Cua</button>
+            <button class="quick-food-btn" onclick="quickSelect('Trà sữa trân châu')">🧋 Trà Sữa Trân Châu</button>
+          </div>
+        </div>
+
+        <!-- Action Button -->
+        <div class="action-section">
+          <button class="btn btn-primary btn-lg" id="submit-btn" onclick="estimateCalories()">
+            <i class="fa-solid fa-scale-balanced"></i> PHÂN TÍCH & ĐỊNH LƯỢNG DINH DƯỠNG
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading State with Laser Scan HUD -->
+    <div class="result-loading" id="result-loading" style="display: none;">
+      <div class="scan-hud-line"></div>
+      <i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: var(--primary); margin-bottom: 0.5rem;"></i>
+      <p class="loading-text">Hệ thống AI đang bóc tách thành phần món ăn và đối chiếu cơ sở dữ liệu y học dinh dưỡng...</p>
+    </div>
+
+    <!-- Error Alert Box -->
+    <div id="error-banner" style="display: none; background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.4); color: #fca5a5; padding: 1rem; border-radius: var(--radius-md); margin-bottom: 2rem; font-size: 0.95rem;">
+      <i class="fa-solid fa-triangle-exclamation"></i> <span id="error-message">Có lỗi xảy ra khi phân tích món ăn.</span>
+    </div>
+
+    <!-- Nutrition Analysis Result Card -->
+    <div class="result-card" id="result-card" style="display: none;">
+      <div class="result-header">
+        <div class="food-info">
+          <h2 id="result-food-name">Phở Bò Tái</h2>
+          <div class="confidence-badge" id="result-confidence">Phân tích: Đầy đủ</div>
+        </div>
+        <div class="health-score-container">
+          <span style="font-size: 0.75rem; color: var(--text-muted); display: block; text-align: right;">Chỉ Số Dinh Dưỡng</span>
+          <div class="health-score-badge" id="result-health-score">8/10</div>
+        </div>
+      </div>
+
+      <div class="result-nutrition-grid">
+        <!-- Calorie Counter Box -->
+        <div class="calorie-display-box">
+          <div class="calorie-number" id="result-calories">550</div>
+          <div class="calorie-unit">Năng lượng (kcal)</div>
+        </div>
+
+        <!-- Donut Chart & Macros -->
+        <div class="macros-chart-box">
+          <svg width="110" height="110" viewBox="0 0 36 36" style="transform: rotate(-90deg);">
+            <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="4.5" />
+            <path id="svg-protein" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#3b82f6" stroke-width="4.5" stroke-dasharray="25, 100" />
+            <path id="svg-carbs" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#10b981" stroke-width="4.5" stroke-dasharray="60, 100" stroke-dashoffset="-25" />
+            <path id="svg-fat" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#f59e0b" stroke-width="4.5" stroke-dasharray="15, 100" stroke-dashoffset="-85" />
+          </svg>
+
+          <div class="macros-legend">
+            <div class="legend-item protein">
+              <span class="dot"></span>
+              <span>Chất đạm: <strong id="result-protein">28</strong>g</span>
+            </div>
+            <div class="legend-item carbs">
+              <span class="dot"></span>
+              <span>Đường bột: <strong id="result-carbs">65</strong>g</span>
+            </div>
+            <div class="legend-item fat">
+              <span class="dot"></span>
+              <span>Chất béo: <strong id="result-fat">18</strong>g</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ingredient Breakdown Table (Fixing render issue) -->
+      <div class="ingredients-section">
+        <h3><i class="fa-solid fa-list-check"></i> Chi tiết các thành phần bóc tách</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Thành phần thực phẩm</th>
+                <th>Khối lượng ước tính</th>
+                <th>Calo thành phần</th>
+              </tr>
+            </thead>
+            <tbody id="ingredients-table-body">
+              <!-- Dynamically rendered rows -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Medical Assessment -->
+      <div class="assessment-section">
+        <h3><i class="fa-solid fa-stethoscope"></i> Đánh giá y học dinh dưỡng</h3>
+        <p id="result-assessment">Đang cập nhật đánh giá y tế...</p>
+      </div>
+
+      <!-- Health Recommendations -->
+      <div class="suggestions-section">
+        <h3><i class="fa-solid fa-heart-pulse"></i> Khuyến nghị sức khỏe</h3>
+        <ul id="result-suggestions">
+          <!-- Dynamically inserted -->
+        </ul>
+      </div>
+
+      <!-- Save to History Form -->
+      <div class="save-diary-config">
+        <div class="config-row">
+          <div class="config-item">
+            <label for="save-meal-type"><i class="fa-solid fa-utensils"></i> Chọn Bữa Ăn:</label>
+            <select id="save-meal-type" class="custom-select">
+              <option value="sang">🍳 Bữa Sáng</option>
+              <option value="trua" selected>🍛 Bữa Trưa</option>
+              <option value="toi">🍜 Bữa Tối</option>
+              <option value="phu">🍎 Bữa Phụ</option>
+            </select>
+          </div>
+          <div class="config-item">
+            <label for="save-meal-date"><i class="fa-solid fa-calendar-day"></i> Chọn Ngày:</label>
+            <input type="date" id="save-meal-date" class="custom-date-input">
+          </div>
+        </div>
+        <button class="btn btn-success" id="save-history-btn" onclick="saveToHistory()">
+          <i class="fa-solid fa-folder-plus"></i> LƯU VÀO SỔ TAY DINH DƯỠNG
+        </button>
+      </div>
+    </div>
+
+    <!-- TDEE / BMR Personal Nutrition Calculator -->
+    <div class="calculator-card" id="tdee-section">
+      <div class="card-header-title" style="margin-bottom: 1.25rem;">
+        <h2><i class="fa-solid fa-calculator"></i> Tính lượng Calo cơ thể cần mỗi ngày (TDEE / BMR)</h2>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">Xác định lượng calo tiêu thụ tự nhiên và đặt mục tiêu Giảm cân, Giữ cân hoặc Tăng cân chuẩn khoa học.</p>
+      </div>
+      
+      <div class="tdee-form-grid">
+        <div class="input-group">
+          <label><i class="fa-solid fa-venus-mars"></i> Giới tính</label>
+          <div class="gender-radio-group">
+            <label class="radio-label"><input type="radio" name="tdee-gender" value="male" checked> Nam</label>
+            <label class="radio-label"><input type="radio" name="tdee-gender" value="female"> Nữ</label>
+          </div>
+        </div>
+        <div class="input-group">
+          <label for="tdee-age"><i class="fa-solid fa-user-clock"></i> Tuổi của bạn</label>
+          <input type="number" id="tdee-age" value="25" min="10" max="100">
+        </div>
+        <div class="input-group">
+          <label for="tdee-weight"><i class="fa-solid fa-weight-scale"></i> Cân nặng (kg)</label>
+          <input type="number" id="tdee-weight" value="65" min="30" max="200">
+        </div>
+        <div class="input-group">
+          <label for="tdee-height"><i class="fa-solid fa-ruler-vertical"></i> Chiều cao (cm)</label>
+          <input type="number" id="tdee-height" value="170" min="100" max="250">
+        </div>
+        <div class="input-group full-width">
+          <label for="tdee-activity"><i class="fa-solid fa-person-running"></i> Tần suất vận động hàng tuần</label>
+          <select id="tdee-activity" class="custom-select">
+            <option value="1.2">Không vận động / Làm việc văn phòng ít đi lại</option>
+            <option value="1.375" selected>Vận động nhẹ (Tập thể dục 1-3 ngày/tuần)</option>
+            <option value="1.55">Vận động vừa (Tập luyện đều đặn 3-5 ngày/tuần)</option>
+            <option value="1.725">Vận động nặng (Tập thể thao cường độ cao 6-7 ngày/tuần)</option>
+            <option value="1.9">Vận động cực nặng (Lao động nặng / VĐV chuyên nghiệp)</option>
+          </select>
+        </div>
+        <div class="input-group full-width">
+          <label for="tdee-goal"><i class="fa-solid fa-bullseye"></i> Mục tiêu sức khỏe</label>
+          <select id="tdee-goal" class="custom-select">
+            <option value="lose">Giảm cân khoa học (Thâm hụt 500 kcal)</option>
+            <option value="maintain" selected>Giữ cân hiện tại (Cân bằng năng lượng)</option>
+            <option value="gain">Tăng cân tăng cơ (Dư thừa 300 kcal)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="action-section">
+        <button class="btn btn-primary" onclick="calculateTDEE()">
+          <i class="fa-solid fa-circle-check"></i> THIẾT LẬP CHỈ SỐ DINH DƯỠNG CÁ NHÂN
+        </button>
+      </div>
+
+      <!-- TDEE Result -->
+      <div class="tdee-result-box" id="tdee-result" style="display: none;">
+        <div class="tdee-result-grid">
+          <div class="tdee-result-card">
+            <span class="tdee-card-title">BMR (Trao đổi chất cơ bản)</span>
+            <strong id="bmr-val">1550</strong> <span style="font-size:0.8rem;">kcal</span>
+            <p>Năng lượng tối thiểu cần để duy trì sự sống.</p>
+          </div>
+          <div class="tdee-result-card">
+            <span class="tdee-card-title">TDEE (Tiêu hao hàng ngày)</span>
+            <strong id="tdee-val">2130</strong> <span style="font-size:0.8rem;">kcal</span>
+            <p>Tổng năng lượng tiêu thụ gồm vận động.</p>
+          </div>
+          <div class="tdee-result-card highlighted">
+            <span class="tdee-card-title">Hạn Mức Calo Nạp Khuyến Nghị</span>
+            <strong id="target-val">1630</strong> <span style="font-size:0.8rem;">kcal/ngày</span>
+            <p>Mục tiêu nạp hàng ngày tối ưu.</p>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="applyCalculatedTarget()" style="width: 100%;">
+          <i class="fa-solid fa-circle-arrow-up"></i> Áp dụng làm mục tiêu chuẩn cho Sổ Tay Dinh Dưỡng
+        </button>
+      </div>
+    </div>
+
+    <!-- Nutrition Diary Section -->
+    <div class="history-card" id="diary-section">
+      <div class="history-header">
+        <h2><i class="fa-solid fa-book-medical"></i> Sổ Tay Dinh Dưỡng</h2>
+        <div class="diary-date-picker-wrapper">
+          <label for="diary-date-select">Xem nhật ký ngày:</label>
+          <input type="date" id="diary-date-select" class="diary-date-input" onchange="loadHistoryForSelectedDate()">
+        </div>
+        <button class="btn-clear-history" onclick="clearHistory()">Xóa tất cả</button>
+      </div>
+
+      <div class="calorie-progress-container">
+        <div class="progress-info">
+          <span>Tổng calo nạp vào: <strong id="history-total-calories">0</strong> / <span id="history-target-calories">2000</span> kcal</span>
+          <span id="history-percentage">0%</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="history-progress-fill" style="width: 0%;"></div>
+        </div>
+      </div>
+
+      <!-- Meals Grid -->
+      <div class="meals-diary-container">
+        <div class="meal-group-card" id="meal-group-sang">
+          <div class="meal-group-header">
+            <span>🍳 Bữa Sáng</span>
+            <span><strong id="sum-cal-sang">0</strong> kcal</span>
+          </div>
+          <div id="list-sang"></div>
+        </div>
+
+        <div class="meal-group-card" id="meal-group-trua">
+          <div class="meal-group-header">
+            <span>🍛 Bữa Trưa</span>
+            <span><strong id="sum-cal-trua">0</strong> kcal</span>
+          </div>
+          <div id="list-trua"></div>
+        </div>
+
+        <div class="meal-group-card" id="meal-group-toi">
+          <div class="meal-group-header">
+            <span>🍜 Bữa Tối</span>
+            <span><strong id="sum-cal-toi">0</strong> kcal</span>
+          </div>
+          <div id="list-toi"></div>
+        </div>
+
+        <div class="meal-group-card" id="meal-group-phu">
+          <div class="meal-group-header">
+            <span>🍎 Bữa Phụ</span>
+            <span><strong id="sum-cal-phu">0</strong> kcal</span>
+          </div>
+          <div id="list-phu"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SEO Hub & FAQ Section -->
+    <section class="seo-content-section" id="seo-section">
+      <h2>Quy Trình Định Lượng Dinh Dưỡng Khoa Học</h2>
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-num">1</div>
+          <h4>Tải ảnh hoặc Ghi mô tả</h4>
+          <p>Chọn ảnh món ăn thực tế chụp bằng camera hoặc gõ nhanh thành phần bữa ăn.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">2</div>
+          <h4>Bóc Tách & Đối Chiếu CSDL</h4>
+          <p>Thuật toán tự động bóc tách thành phần chính, ước lượng khối lượng (g) và calo.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">3</div>
+          <h4>Theo Dõi Sổ Tay Sức Khỏe</h4>
+          <p>Xem chỉ số Calo, Đạm, Đường, Béo và lưu trữ vào sổ tay dinh dưỡng 4 bữa ăn.</p>
+        </div>
+      </div>
+
+      <h3>Câu Hỏi Thường Gặp (FAQ)</h3>
+      <div class="faq-container">
+        <div class="faq-item">
+          <button class="faq-question" onclick="toggleFaq(this)">
+            <span>Độ chính xác của việc định lượng dinh dưỡng đạt bao nhiêu %?</span>
+            <i class="fa-solid fa-chevron-down"></i>
+          </button>
+          <div class="faq-answer">
+            <p>Hệ thống đạt độ chính xác khoảng 85-90% dựa trên dữ liệu đối chiếu từ Viện Dinh Dưỡng Quốc Gia và USDA. Bạn có thể ghi chú thêm cách chế biến (hấp, áp chảo, chiên...) để kết quả chuẩn xác nhất.</p>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question" onclick="toggleFaq(this)">
+            <span>Dữ liệu nhật ký và hình ảnh của tôi có được bảo mật không?</span>
+            <i class="fa-solid fa-chevron-down"></i>
+          </button>
+          <div class="faq-answer">
+            <p>Tuyệt đối bảo mật. Hình ảnh chỉ gửi mã hóa qua API để phân tích và không lưu trữ lại. Sổ tay dinh dưỡng được lưu trực tiếp trên thiết bị của bạn (localStorage).</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Settings Modal (Optional Advanced Key) -->
+  <div class="modal" id="settings-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-key"></i> Kết nối Cơ sở dữ liệu cá nhân (Tùy chọn)</h3>
+        <button class="close-modal-btn" onclick="closeSettings()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 0.8rem; color: #a7f3d0;">
+          <i class="fa-solid fa-circle-check"></i> <strong>Lưu ý:</strong> Mặc định CaloVision đã tích hợp sẵn máy chủ phân tích Gemini API hoàn toàn miễn phí (10 lượt/ngày).
+        </p>
+        <p>Nếu bạn là người dùng nâng cao muốn sử dụng không giới hạn lượt truy cập, bạn có thể tự cấu hình mã Gemini API Key riêng của bạn ở đây:</p>
+        
+        <div class="input-group" style="margin-top: 1rem;">
+          <label for="local-api-key">Mã Gemini API Key cá nhân</label>
+          <input type="password" id="local-api-key" placeholder="AIzaSy...">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="clearApiKey()">Xóa key</button>
+        <button class="btn btn-primary" onclick="saveApiKey()">Lưu cấu hình</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-container">
+      <p>&copy; 2026 CaloVision. Hệ thống kiểm soát và định lượng năng lượng khoa học.</p>
+      <p style="margin-top: 0.4rem;">
+        <a href="cam-nang/index.html" style="color: var(--primary); text-decoration: none; margin-right: 1rem;">Cẩm Nang Dinh Dưỡng</a>
+        <a href="sitemap.xml" style="color: var(--text-muted); text-decoration: none;">Sitemap XML</a>
+      </p>
+      <div class="medical-disclaimer">
+        <strong>Tuyên bố miễn trừ trách nhiệm y tế:</strong> Mọi thông tin dinh dưỡng, calo và khuyến nghị trên CaloVision chỉ dành cho mục đích giáo dục, tham khảo chung. Không thay thế cho chẩn đoán hoặc tư vấn y khoa chuyên sâu từ bác sĩ.
+      </div>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
