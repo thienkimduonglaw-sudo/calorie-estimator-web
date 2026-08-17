@@ -354,7 +354,9 @@
         "bánh giò trứng cút calo"
       ],
       "category": "a",
-      "status": "pending"
+      "status": "published",
+      "publishedSlug": "banh-gio-bao-nhieu-calo.html",
+      "publishedAt": "2026-08-17"
     },
     {
       "id": "topic-028",
@@ -365,7 +367,9 @@
         "tôm cháy bánh bèo calo"
       ],
       "category": "a",
-      "status": "pending"
+      "status": "published",
+      "publishedSlug": "banh-beo-bao-nhieu-calo.html",
+      "publishedAt": "2026-08-17"
     },
     {
       "id": "topic-029",
@@ -376,7 +380,9 @@
         "ốc mỡ xào me calo"
       ],
       "category": "a",
-      "status": "pending"
+      "status": "published",
+      "publishedSlug": "cac-mon-oc-bao-nhieu-calo.html",
+      "publishedAt": "2026-08-17"
     },
     {
       "id": "topic-030",
@@ -387,7 +393,9 @@
         "gỏi gà xé phay calo"
       ],
       "category": "a",
-      "status": "pending"
+      "status": "published",
+      "publishedSlug": "chao-ga-bao-nhieu-calo.html",
+      "publishedAt": "2026-08-17"
     },
     {
       "id": "topic-031",
@@ -398,7 +406,9 @@
         "mì tôm bò trứng calo"
       ],
       "category": "a",
-      "status": "pending"
+      "status": "published",
+      "publishedSlug": "mi-tom-bao-nhieu-calo.html",
+      "publishedAt": "2026-08-17"
     },
     {
       "id": "topic-032",
