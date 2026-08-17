@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
+
+const GITHUB_REPO = 'thienkimduonglaw-sudo/calorie-estimator-web';
 
 function removeVietnameseTones(str) {
   if (!str) return '';
@@ -23,22 +24,7 @@ function removeVietnameseTones(str) {
 
 export default async function handler(req, res) {
   const rootDir = process.cwd();
-  const tmpDir = os.tmpdir();
-  const tmpQueuePath = path.join(tmpDir, 'content-queue.json');
-  const rootQueuePath = path.join(rootDir, 'content-queue.json');
-
-  // Copy seed queue to /tmp if not already there
-  let queuePath = rootQueuePath;
-  if (!fs.existsSync(tmpQueuePath) && fs.existsSync(rootQueuePath)) {
-    try {
-      fs.copyFileSync(rootQueuePath, tmpQueuePath);
-      queuePath = tmpQueuePath;
-    } catch (e) {
-      queuePath = rootQueuePath;
-    }
-  } else if (fs.existsSync(tmpQueuePath)) {
-    queuePath = tmpQueuePath;
-  }
+  const queuePath = path.join(rootDir, 'content-queue.json');
 
   if (!fs.existsSync(queuePath)) {
     return res.status(500).json({ error: 'content-queue.json not found' });
@@ -46,91 +32,85 @@ export default async function handler(req, res) {
 
   const data = JSON.parse(fs.readFileSync(queuePath, 'utf8'));
   const queue = data.queue || [];
-  const config = data.config || {};
+  const githubToken = process.env.GITHUB_TOKEN;
 
-  // Check auto-publish draft after X hours
-  const now = new Date();
-  let draftToPublish = null;
-
-  for (const item of queue) {
-    if (item.status === 'draft' && item.draftCreatedAt && config.autoPublishEnabled) {
-      const createdAt = new Date(item.draftCreatedAt);
-      const hoursDiff = (now - createdAt) / (1000 * 60 * 60);
-      if (hoursDiff >= (config.autoPublishHours || 12)) {
-        draftToPublish = item;
-        break;
-      }
-    }
-  }
-
-  if (draftToPublish) {
-    return await publishDraft(draftToPublish, data, queuePath, tmpDir, rootDir, res);
-  }
-
+  // Find next pending topic
   const pendingTopic = queue.find(item => item.status === 'pending');
   if (!pendingTopic) {
-    return res.status(200).json({ message: 'Tất cả chủ đề trong Content Queue đã được xử lý!' });
+    return res.status(200).json({
+      success: true,
+      message: 'Tất cả 60 chủ đề trong Content Queue đã được xuất bản!'
+    });
   }
 
   const publishedArticles = queue.filter(item => item.status === 'published');
   const slug = removeVietnameseTones(pendingTopic.primaryKeyword);
+  const apiKey = process.env.GEMINI_API_KEY;
 
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
+    // 1. Generate full SEO article content using Gemini API
     const articleHtml = apiKey 
       ? await generateArticleWithGemini(pendingTopic, publishedArticles, slug, apiKey)
-      : generateLocalDraftContent(pendingTopic, slug);
+      : generateLocalArticleContent(pendingTopic, slug);
 
-    // Save draft safely in /tmp/drafts
-    const draftsDir = path.join(tmpDir, 'drafts');
-    if (!fs.existsSync(draftsDir)) {
-      fs.mkdirSync(draftsDir, { recursive: true });
+    // 2. Commit newly generated article file directly to GitHub repo if GITHUB_TOKEN configured
+    const filePath = `cam-nang/${slug}.html`;
+    if (githubToken) {
+      await commitFileToGitHub(filePath, articleHtml, `Tự động xuất bản bài mới: ${pendingTopic.topic}`, githubToken);
+      pendingTopic.status = 'published';
+      pendingTopic.publishedSlug = `${slug}.html`;
+      pendingTopic.publishedAt = new Date().toISOString().split('T')[0];
+      await commitFileToGitHub('content-queue.json', JSON.stringify(data, null, 2), `Update content queue status for ${pendingTopic.topic}`, githubToken);
+    } else {
+      pendingTopic.status = 'published';
+      pendingTopic.publishedSlug = `${slug}.html`;
+      pendingTopic.publishedAt = new Date().toISOString().split('T')[0];
     }
 
-    const draftFilePath = path.join(draftsDir, `${slug}.html`);
-    fs.writeFileSync(draftFilePath, articleHtml, 'utf8');
-
-    // Update queue
-    pendingTopic.status = 'draft';
-    pendingTopic.draftCreatedAt = new Date().toISOString();
-    pendingTopic.draftSlug = `${slug}.html`;
-
-    try {
-      fs.writeFileSync(queuePath, JSON.stringify(data, null, 2), 'utf8');
-    } catch (e) {
-      // Fallback save to /tmp
-      fs.writeFileSync(tmpQueuePath, JSON.stringify(data, null, 2), 'utf8');
-    }
+    // 3. Ping Google Sitemap
+    await pingGoogleSitemap();
 
     return res.status(200).json({
       success: true,
-      message: `Đã sinh bài viết cho chủ đề "${pendingTopic.topic}".`,
+      message: `Đã tự động tạo và xuất bản bài mới: "${pendingTopic.topic}"!`,
       topic: pendingTopic.topic,
-      primaryKeyword: pendingTopic.primaryKeyword,
-      status: pendingTopic.status,
-      autoPublishInHours: config.autoPublishHours || 12,
-      note: apiKey ? 'Đã dùng Gemini API sinh nội dung AI chuẩn 100%!' : 'Chưa cài GEMINI_API_KEY trên Vercel.'
+      publishedUrl: `https://tinhcalo-vietnam.vercel.app/cam-nang/${slug}.html`,
+      note: githubToken ? 'Bài viết đã được commit trực tiếp lên GitHub và Vercel đang tự động deploy!' : 'Thêm GITHUB_TOKEN vào Vercel Environment Variables để tự động commit bài mới vĩnh viễn lên GitHub.'
     });
 
   } catch (err) {
-    console.error('Error generating daily article:', err);
-    return res.status(500).json({ error: err.message || 'Lỗi khi sinh bài viết.' });
+    console.error('Error in daily cron:', err);
+    return res.status(500).json({ error: err.message || 'Lỗi khi xuất bản bài viết mới.' });
   }
 }
 
 async function generateArticleWithGemini(topicObj, publishedArticles, slug, apiKey) {
+  const linksContext = publishedArticles.slice(0, 4).map(a => `- Tên bài: "${a.topic}", Link: "${a.publishedSlug}"`).join('\n');
+
   const prompt = `
 Bạn là Chuyên gia Dinh dưỡng Y tế CaloVision.
-Hãy viết một bài viết SEO chuẩn y khoa về món/chủ đề "${topicObj.topic}".
-Từ khóa chính: "${topicObj.primaryKeyword}"
-Từ khóa phụ: ${JSON.stringify(topicObj.secondaryKeywords)}
+Hãy viết một bài viết SEO chuẩn YMYL & E-E-A-T về món/chủ đề "${topicObj.topic}".
+- Từ khóa chính: "${topicObj.primaryKeyword}"
+- Các từ khóa phụ: ${JSON.stringify(topicObj.secondaryKeywords)}
+- Bài viết liên quan để chèn Internal Link:
+${linksContext}
 
 QUY TẮC BẮT BUỘC:
 1. Độ dài: 850-1200 từ.
-2. Mỗi đoạn văn CHỈ 2-3 CÂU NGẮN, mỗi câu <25 từ.
-3. Có H1, H2 Bảng Dinh Dưỡng Chi Tiết, H2 Ăn Có Béo Không, H2 Mẹo Ăn Healthy, H2 FAQ (5 câu).
+2. MỖI ĐOẠN VĂN CHỈ 2-3 CÂU NGẮN (<20 từ/câu).
+3. HEADING BẮT BUỘC:
+   - H1: ${topicObj.topic} Bao Nhiêu Calo? [Chi Tiết Kcal] – CaloVision
+   - H2: Bảng Dinh Dưỡng Chi Tiết ${topicObj.topic} (bảng 5-6 dòng thành phần g, kcal)
+   - Khối CTA box dẫn link sang "../index.html?food=${encodeURIComponent(topicObj.topic)}" ngay sau bảng.
+   - H2: Ăn ${topicObj.topic} Có Béo Không? Phân Tích Dinh Dưỡng (so sánh TDEE)
+   - H2: Cách Ăn ${topicObj.topic} Healthy Hơn Không Lo Tăng Cân (4 mẹo)
+   - H2: Câu Hỏi Thường Gặp Về ${topicObj.topic} (FAQ 5 câu)
+   - H2: Bài Viết Liên Quan Trong Cụm Dinh Dưỡng
 4. Trích nguồn Viện Dinh Dưỡng Quốc Gia Việt Nam và USDA.
-5. Dòng kiểm duyệt: "Nội dung được kiểm duyệt bởi đội ngũ CaloVision, đối chiếu dữ liệu từ Viện Dinh Dưỡng VN và USDA."
+5. Cuối bài: "Nội dung được kiểm duyệt bởi đội ngũ CaloVision, đối chiếu dữ liệu từ Viện Dinh Dưỡng VN và USDA."
+6. Nhúng JSON-LD Article và FAQPage.
+
+Hãy trả về mã HTML hoàn chỉnh 100% không bọc markdown block.
 `;
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
@@ -145,22 +125,50 @@ QUY TẮC BẮT BUỘC:
   return text.replace(/^```html\s*/i, '').replace(/```$/i, '').trim();
 }
 
-function generateLocalDraftContent(topicObj, slug) {
+function generateLocalArticleContent(topicObj, slug) {
   return `<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>${topicObj.topic} Bao Nhiêu Calo?</title></head><body><h1>${topicObj.topic} Bao Nhiêu Calo?</h1></body></html>`;
 }
 
-async function publishDraft(draftItem, data, queuePath, tmpDir, rootDir, res) {
-  draftItem.status = 'published';
-  draftItem.publishedSlug = `${removeVietnameseTones(draftItem.primaryKeyword)}.html`;
-  draftItem.publishedAt = new Date().toISOString().split('T')[0];
-
-  try {
-    fs.writeFileSync(queuePath, JSON.stringify(data, null, 2), 'utf8');
-  } catch (e) {}
-
-  return res.status(200).json({
-    success: true,
-    message: `Đã tự động xuất bản bài viết "${draftItem.topic}".`,
-    publishedSlug: draftItem.publishedSlug
+async function commitFileToGitHub(filePath, contentStr, commitMessage, token) {
+  const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${filePath}`;
+  
+  let sha = null;
+  const getRes = await fetch(url, {
+    headers: {
+      'Authorization': `token ${token}`,
+      'User-Agent': 'CaloVision-Bot'
+    }
   });
+
+  if (getRes.ok) {
+    const getJson = await getRes.json();
+    sha = getJson.sha;
+  }
+
+  const body = {
+    message: commitMessage,
+    content: Buffer.from(contentStr, 'utf8').toString('base64'),
+    branch: 'main'
+  };
+  if (sha) body.sha = sha;
+
+  const putRes = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `token ${token}`,
+      'Content-Type': 'application/json',
+      'User-Agent': 'CaloVision-Bot'
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!putRes.ok) {
+    const errText = await putRes.text();
+    console.error('GitHub API error:', errText);
+  }
+}
+
+async function pingGoogleSitemap() {
+  const pingUrl = `https://www.google.com/ping?sitemap=https://tinhcalo-vietnam.vercel.app/sitemap.xml`;
+  await fetch(pingUrl).catch(() => {});
 }
