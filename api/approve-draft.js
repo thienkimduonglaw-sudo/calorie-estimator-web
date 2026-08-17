@@ -1,9 +1,24 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 export default async function handler(req, res) {
   const rootDir = process.cwd();
-  const queuePath = path.join(rootDir, 'content-queue.json');
+  const tmpDir = os.tmpdir();
+  const tmpQueuePath = path.join(tmpDir, 'content-queue.json');
+  const rootQueuePath = path.join(rootDir, 'content-queue.json');
+
+  let queuePath = rootQueuePath;
+  if (fs.existsSync(tmpQueuePath)) {
+    queuePath = tmpQueuePath;
+  } else if (fs.existsSync(rootQueuePath)) {
+    try {
+      fs.copyFileSync(rootQueuePath, tmpQueuePath);
+      queuePath = tmpQueuePath;
+    } catch (e) {
+      queuePath = rootQueuePath;
+    }
+  }
 
   if (!fs.existsSync(queuePath)) {
     return res.status(500).json({ error: 'content-queue.json not found' });
@@ -13,7 +28,6 @@ export default async function handler(req, res) {
   const config = data.config || {};
   const queue = data.queue || [];
 
-  // GET: Return current queue status and config
   if (req.method === 'GET') {
     return res.status(200).json({
       config,
@@ -25,28 +39,26 @@ export default async function handler(req, res) {
     });
   }
 
-  // POST: Toggle config or approve/reject draft
   if (req.method === 'POST') {
     const { action, topicId, autoPublishEnabled, autoPublishHours } = req.body || {};
 
-    // 1. Toggle Auto-Publish Settings
     if (action === 'toggle-config') {
-      if (typeof autoPublishEnabled === 'boolean') {
-        config.autoPublishEnabled = autoPublishEnabled;
-      }
-      if (typeof autoPublishHours === 'number') {
-        config.autoPublishHours = autoPublishHours;
+      if (typeof autoPublishEnabled === 'boolean') config.autoPublishEnabled = autoPublishEnabled;
+      if (typeof autoPublishHours === 'number') config.autoPublishHours = autoPublishHours;
+
+      try {
+        fs.writeFileSync(queuePath, JSON.stringify(data, null, 2), 'utf8');
+      } catch (e) {
+        fs.writeFileSync(tmpQueuePath, JSON.stringify(data, null, 2), 'utf8');
       }
 
-      fs.writeFileSync(queuePath, JSON.stringify(data, null, 2), 'utf8');
       return res.status(200).json({
         success: true,
-        message: `Đã cập nhật cấu hình: Auto-Publish = ${config.autoPublishEnabled}, Thời gian chờ = ${config.autoPublishHours} giờ.`,
+        message: `Đã cập nhật cấu hình: Auto-Publish = ${config.autoPublishEnabled}, Thời gian chờ = ${config.autoPublishHours}h.`,
         config
       });
     }
 
-    // 2. Approve Draft Immediately
     if (action === 'approve' && topicId) {
       const item = queue.find(i => i.id === topicId);
       if (!item) return res.status(404).json({ error: 'Chủ đề không tồn tại' });
@@ -54,7 +66,12 @@ export default async function handler(req, res) {
       item.status = 'published';
       item.publishedAt = new Date().toISOString().split('T')[0];
 
-      fs.writeFileSync(queuePath, JSON.stringify(data, null, 2), 'utf8');
+      try {
+        fs.writeFileSync(queuePath, JSON.stringify(data, null, 2), 'utf8');
+      } catch (e) {
+        fs.writeFileSync(tmpQueuePath, JSON.stringify(data, null, 2), 'utf8');
+      }
+
       return res.status(200).json({
         success: true,
         message: `Đã phê duyệt thủ công bài viết "${item.topic}".`,
@@ -62,7 +79,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // 3. Reject Draft
     if (action === 'reject' && topicId) {
       const item = queue.find(i => i.id === topicId);
       if (!item) return res.status(404).json({ error: 'Chủ đề không tồn tại' });
@@ -71,10 +87,15 @@ export default async function handler(req, res) {
       delete item.draftCreatedAt;
       delete item.draftSlug;
 
-      fs.writeFileSync(queuePath, JSON.stringify(data, null, 2), 'utf8');
+      try {
+        fs.writeFileSync(queuePath, JSON.stringify(data, null, 2), 'utf8');
+      } catch (e) {
+        fs.writeFileSync(tmpQueuePath, JSON.stringify(data, null, 2), 'utf8');
+      }
+
       return res.status(200).json({
         success: true,
-        message: `Đã từ chối bản nháp "${item.topic}", trả về trạng thái Pending.`,
+        message: `Đã từ chối bản nháp "${item.topic}".`,
         item
       });
     }

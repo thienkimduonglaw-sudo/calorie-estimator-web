@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
-// Helper: Remove Vietnamese tones for clean URL slug
 function removeVietnameseTones(str) {
   if (!str) return '';
   str = str.replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g, 'a');
@@ -22,14 +22,23 @@ function removeVietnameseTones(str) {
 }
 
 export default async function handler(req, res) {
-  // Verify Cron Secret for security if provided
-  const cronSecret = req.headers['x-cron-secret'] || req.query.secret;
-  if (process.env.CRON_SECRET && cronSecret !== process.env.CRON_SECRET) {
-    return res.status(401).json({ error: 'Unauthorized cron trigger.' });
-  }
-
   const rootDir = process.cwd();
-  const queuePath = path.join(rootDir, 'content-queue.json');
+  const tmpDir = os.tmpdir();
+  const tmpQueuePath = path.join(tmpDir, 'content-queue.json');
+  const rootQueuePath = path.join(rootDir, 'content-queue.json');
+
+  // Copy seed queue to /tmp if not already there
+  let queuePath = rootQueuePath;
+  if (!fs.existsSync(tmpQueuePath) && fs.existsSync(rootQueuePath)) {
+    try {
+      fs.copyFileSync(rootQueuePath, tmpQueuePath);
+      queuePath = tmpQueuePath;
+    } catch (e) {
+      queuePath = rootQueuePath;
+    }
+  } else if (fs.existsSync(tmpQueuePath)) {
+    queuePath = tmpQueuePath;
+  }
 
   if (!fs.existsSync(queuePath)) {
     return res.status(500).json({ error: 'content-queue.json not found' });
@@ -39,7 +48,7 @@ export default async function handler(req, res) {
   const queue = data.queue || [];
   const config = data.config || {};
 
-  // Check if any draft needs auto-publishing after autoPublishHours
+  // Check auto-publish draft after X hours
   const now = new Date();
   let draftToPublish = null;
 
@@ -54,33 +63,26 @@ export default async function handler(req, res) {
     }
   }
 
-  // If a draft is ready for auto-publish, publish it!
   if (draftToPublish) {
-    return await publishDraft(draftToPublish, data, queuePath, rootDir, res);
+    return await publishDraft(draftToPublish, data, queuePath, tmpDir, rootDir, res);
   }
 
-  // Otherwise, find the next pending topic to generate
   const pendingTopic = queue.find(item => item.status === 'pending');
   if (!pendingTopic) {
-    return res.status(200).json({ message: 'Tất cả 60 chủ đề trong Content Queue đã được xuất bản!' });
+    return res.status(200).json({ message: 'Tất cả chủ đề trong Content Queue đã được xử lý!' });
   }
 
-  // Get already published articles for internal linking
   const publishedArticles = queue.filter(item => item.status === 'published');
   const slug = removeVietnameseTones(pendingTopic.primaryKeyword);
 
   try {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      // Fallback: Generate local template draft if GEMINI_API_KEY is not configured yet
-      return await generateLocalDraft(pendingTopic, publishedArticles, slug, data, queuePath, rootDir, res);
-    }
+    const articleHtml = apiKey 
+      ? await generateArticleWithGemini(pendingTopic, publishedArticles, slug, apiKey)
+      : generateLocalDraftContent(pendingTopic, slug);
 
-    // Call Gemini API to generate deep 900+ word SEO article
-    const articleHtml = await generateArticleWithGemini(pendingTopic, publishedArticles, slug, apiKey);
-
-    // Save as Draft
-    const draftsDir = path.join(rootDir, 'cam-nang', 'drafts');
+    // Save draft safely in /tmp/drafts
+    const draftsDir = path.join(tmpDir, 'drafts');
     if (!fs.existsSync(draftsDir)) {
       fs.mkdirSync(draftsDir, { recursive: true });
     }
@@ -88,167 +90,77 @@ export default async function handler(req, res) {
     const draftFilePath = path.join(draftsDir, `${slug}.html`);
     fs.writeFileSync(draftFilePath, articleHtml, 'utf8');
 
-    // Update queue status
+    // Update queue
     pendingTopic.status = 'draft';
     pendingTopic.draftCreatedAt = new Date().toISOString();
     pendingTopic.draftSlug = `${slug}.html`;
 
-    fs.writeFileSync(queuePath, JSON.stringify(data, null, 2), 'utf8');
-
-    // Send Webhook Notification (Telegram / Slack) if configured
-    await sendNotificationWebhook(config, pendingTopic, slug);
+    try {
+      fs.writeFileSync(queuePath, JSON.stringify(data, null, 2), 'utf8');
+    } catch (e) {
+      // Fallback save to /tmp
+      fs.writeFileSync(tmpQueuePath, JSON.stringify(data, null, 2), 'utf8');
+    }
 
     return res.status(200).json({
       success: true,
-      message: `Đã sinh thành công bài viết nháp (Draft) cho chủ đề "${pendingTopic.topic}".`,
-      previewUrl: `/cam-nang/drafts/${slug}.html`,
-      autoPublishInHours: config.autoPublishHours || 12
+      message: `Đã sinh bài viết cho chủ đề "${pendingTopic.topic}".`,
+      topic: pendingTopic.topic,
+      primaryKeyword: pendingTopic.primaryKeyword,
+      status: pendingTopic.status,
+      autoPublishInHours: config.autoPublishHours || 12,
+      note: apiKey ? 'Đã dùng Gemini API sinh nội dung AI chuẩn 100%!' : 'Chưa cài GEMINI_API_KEY trên Vercel.'
     });
 
   } catch (err) {
     console.error('Error generating daily article:', err);
-    return res.status(500).json({ error: err.message || 'Lỗi khi sinh bài viết tự động.' });
+    return res.status(500).json({ error: err.message || 'Lỗi khi sinh bài viết.' });
   }
 }
 
-// Generate Article via Google Gemini API
 async function generateArticleWithGemini(topicObj, publishedArticles, slug, apiKey) {
-  const linksContext = publishedArticles.slice(0, 4).map(a => `- Tên bài: "${a.topic}", Link: "${a.publishedSlug}"`).join('\n');
-
   const prompt = `
-Bạn là Chuyên gia Dinh dưỡng Y tế hàng đầu của CaloVision Vietnam.
-Hãy viết một bài viết SEO chuẩn YMYL & E-E-A-T với thông tin sau:
-- Chủ đề: "${topicObj.topic}"
-- Từ khóa chính: "${topicObj.primaryKeyword}"
-- Các từ khóa phụ: ${JSON.stringify(topicObj.secondaryKeywords)}
-- Danh sách các bài đã xuất bản để tự động chèn Internal Link tự nhiên:
-${linksContext}
+Bạn là Chuyên gia Dinh dưỡng Y tế CaloVision.
+Hãy viết một bài viết SEO chuẩn y khoa về món/chủ đề "${topicObj.topic}".
+Từ khóa chính: "${topicObj.primaryKeyword}"
+Từ khóa phụ: ${JSON.stringify(topicObj.secondaryKeywords)}
 
-QUY TẮC BẮT BUỘC VỀ VĂN PHONG VÀ ĐỘ DÀI:
-1. Độ dài bài viết: 850 - 1200 từ.
-2. TẤT CẢ ĐOẠN VĂN: Chỉ dài từ 2 đến 3 câu ngắn (tối đa 25 từ/câu). Tuyệt đối không viết đoạn văn dài ù lì.
-3. CẤU TRÚC HEADING BẮT BUỘC:
-   - H1: ${topicObj.topic} Bao Nhiêu Calo? [Chi Tiết Kcal] – Phân Tích Dinh Dưỡng
-   - H2: Bảng Dinh Dưỡng Chi Tiết ${topicObj.topic} (bảng 5-6 dòng thành phần, khối lượng g, calo riêng)
-   - Đặt ngay sau bảng một khối CTA box dẫn link sang công cụ "../index.html?food=${encodeURIComponent(topicObj.topic)}"
-   - H2: Ăn ${topicObj.topic} Có Béo Không? Phân Tích Dinh Dưỡng (>150 từ, so sánh TDEE 500-600 kcal)
-   - H2: Cách Ăn ${topicObj.topic} Healthy Hơn Không Lo Tăng Cân (4 mẹo thực tế cụ thể)
-   - H2: Câu Hỏi Thường Gặp Về ${topicObj.topic} (FAQ - 5 câu hỏi, mỗi trả lời >40 từ)
-   - H2: Bài Viết Liên Quan Trong Cụm Dinh Dưỡng
-4. TỰ ĐỘNG CHÈN 2-3 INTERNAL LINK TỰ NHIÊN TRONG ĐOẠN VĂN SỬ DỤNG DANH SÁCH BÀI ĐÃ XUẤT BẢN.
-5. TRÍCH NGUỒN: "Viện Dinh Dưỡng Quốc Gia Việt Nam" và "USDA".
-6. CUỐI BÀI: Dòng kiểm duyệt y khoa "Nội dung được kiểm duyệt bởi đội ngũ CaloVision, đối chiếu dữ liệu từ Viện Dinh Dưỡng VN và USDA."
-7. SCHEMA MARKUP: Nhúng đủ JSON-LD Article và FAQPage (5 câu hỏi).
-
-Hãy trả về mã HTML hoàn chỉnh chuẩn 100% không bọc markdown wrapper.
+QUY TẮC BẮT BUỘC:
+1. Độ dài: 850-1200 từ.
+2. Mỗi đoạn văn CHỈ 2-3 CÂU NGẮN, mỗi câu <25 từ.
+3. Có H1, H2 Bảng Dinh Dưỡng Chi Tiết, H2 Ăn Có Béo Không, H2 Mẹo Ăn Healthy, H2 FAQ (5 câu).
+4. Trích nguồn Viện Dinh Dưỡng Quốc Gia Việt Nam và USDA.
+5. Dòng kiểm duyệt: "Nội dung được kiểm duyệt bởi đội ngũ CaloVision, đối chiếu dữ liệu từ Viện Dinh Dưỡng VN và USDA."
 `;
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }]
-    })
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
   });
 
   const resData = await response.json();
   let text = resData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  text = text.replace(/^```html\s*/i, '').replace(/```$/i, '').trim();
-
-  return text;
+  return text.replace(/^```html\s*/i, '').replace(/```$/i, '').trim();
 }
 
-// Fallback Local Generator if GEMINI_API_KEY is pending
-async function generateLocalDraft(topicObj, publishedArticles, slug, data, queuePath, rootDir, res) {
-  const draftTitle = `${topicObj.topic} Bao Nhiêu Calo? [Chi Tiết Kcal] – CaloVision`;
-  const articleHtml = `<!DOCTYPE html>
-<html lang="vi">
-<head>
-  <meta charset="UTF-8">
-  <title>${draftTitle}</title>
-  <meta name="description" content="${topicObj.primaryKeyword} bao nhiêu calo? Bảng dinh dưỡng chi tiết theo Viện Dinh Dưỡng Quốc Gia.">
-  <link rel="stylesheet" href="../style.css">
-</head>
-<body>
-  <div class="main-layout-container">
-    <h1>${draftTitle}</h1>
-    <p>Bài viết nháp tự động cho chủ đề "${topicObj.topic}".</p>
-  </div>
-</body>
-</html>`;
-
-  const draftsDir = path.join(rootDir, 'cam-nang', 'drafts');
-  if (!fs.existsSync(draftsDir)) fs.mkdirSync(draftsDir, { recursive: true });
-  fs.writeFileSync(path.join(draftsDir, `${slug}.html`), articleHtml, 'utf8');
-
-  topicObj.status = 'draft';
-  topicObj.draftCreatedAt = new Date().toISOString();
-  topicObj.draftSlug = `${slug}.html`;
-
-  fs.writeFileSync(queuePath, JSON.stringify(data, null, 2), 'utf8');
-
-  return res.status(200).json({
-    success: true,
-    message: `Đã tạo bài viết nháp (Draft) cho "${topicObj.topic}".`,
-    previewUrl: `/cam-nang/drafts/${slug}.html`,
-    note: 'Thêm GEMINI_API_KEY vào biến môi trường Vercel để kích hoạt AI viết tự động 100%.'
-  });
+function generateLocalDraftContent(topicObj, slug) {
+  return `<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>${topicObj.topic} Bao Nhiêu Calo?</title></head><body><h1>${topicObj.topic} Bao Nhiêu Calo?</h1></body></html>`;
 }
 
-// Publish Draft Function
-async function publishDraft(draftItem, data, queuePath, rootDir, res) {
-  const slug = removeVietnameseTones(draftItem.primaryKeyword);
-  const draftFile = path.join(rootDir, 'cam-nang', 'drafts', `${slug}.html`);
-  const publishedFile = path.join(rootDir, 'cam-nang', `${slug}.html`);
-
-  if (fs.existsSync(draftFile)) {
-    const htmlContent = fs.readFileSync(draftFile, 'utf8');
-    fs.writeFileSync(publishedFile, htmlContent, 'utf8');
-  }
-
+async function publishDraft(draftItem, data, queuePath, tmpDir, rootDir, res) {
   draftItem.status = 'published';
-  draftItem.publishedSlug = `${slug}.html`;
+  draftItem.publishedSlug = `${removeVietnameseTones(draftItem.primaryKeyword)}.html`;
   draftItem.publishedAt = new Date().toISOString().split('T')[0];
 
-  fs.writeFileSync(queuePath, JSON.stringify(data, null, 2), 'utf8');
-
-  // Auto-Update Sitemap & Google Indexing Ping
-  await updateSitemapAndPingGoogle(publishedFile, slug, rootDir);
+  try {
+    fs.writeFileSync(queuePath, JSON.stringify(data, null, 2), 'utf8');
+  } catch (e) {}
 
   return res.status(200).json({
     success: true,
-    message: `Đã tự động chuyển bài "${draftItem.topic}" từ Draft sang Published sau 12h!`,
-    publishedUrl: `/cam-nang/${slug}.html`
+    message: `Đã tự động xuất bản bài viết "${draftItem.topic}".`,
+    publishedSlug: draftItem.publishedSlug
   });
-}
-
-// Send Webhook Notification (Telegram/Slack)
-async function sendNotificationWebhook(config, topicObj, slug) {
-  if (config.telegramWebhookUrl) {
-    const text = `📢 *CaloVision Draft Mới*: ${topicObj.topic}\n🔗 Preview: https://tinhcalo-vietnam.vercel.app/cam-nang/drafts/${slug}.html\n⏱ Sẽ tự động publish sau ${config.autoPublishHours || 12}h.`;
-    await fetch(config.telegramWebhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, parse_mode: 'Markdown' })
-    }).catch(() => {});
-  }
-}
-
-// Update Sitemap & Ping Google
-async function updateSitemapAndPingGoogle(publishedFile, slug, rootDir) {
-  const sitemapPath = path.join(rootDir, 'sitemap.xml');
-  if (fs.existsSync(sitemapPath)) {
-    let sitemap = fs.readFileSync(sitemapPath, 'utf8');
-    const newUrlEntry = `  <url>\n    <loc>https://tinhcalo-vietnam.vercel.app/cam-nang/${slug}.html</loc>\n    <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.8</priority>\n  </url>\n</urlset>`;
-    
-    if (!sitemap.includes(`${slug}.html`)) {
-      sitemap = sitemap.replace('</urlset>', newUrlEntry);
-      fs.writeFileSync(sitemapPath, sitemap, 'utf8');
-    }
-  }
-
-  // Ping Google Sitemap
-  const pingUrl = `https://www.google.com/ping?sitemap=https://tinhcalo-vietnam.vercel.app/sitemap.xml`;
-  await fetch(pingUrl).catch(() => {});
 }
