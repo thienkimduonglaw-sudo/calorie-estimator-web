@@ -37,11 +37,12 @@
       <p>Kiến thức y học dinh dưỡng chính thống, phân tích chi tiết lượng calo và mẹo ăn uống lành mạnh.</p>
     </div>
 
-    <!-- Category A: Tra cứu calo món ăn Việt -->
+    <!-- Category A: Tra cứu calo món ăn Việt (Tự động nạp từ Content Queue) -->
     <div class="calculator-card">
-      <h2 style="color: var(--primary); font-size: 1.3rem; margin-bottom: 1rem;"><i class="fa-solid fa-utensils"></i> (A) Tra Cứu Calo Các Món Ăn Việt Nam Phổ Biến</h2>
-      <div class="quick-click-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
+      <h2 style="color: var(--primary); font-size: 1.3rem; margin-bottom: 1rem;"><i class="fa-solid fa-utensils"></i> Danh Sách Bài Viết Tra Cứu Calo (Cập Nhật Tự Động Hàng Ngày)</h2>
+      <div class="quick-click-grid" id="published-articles-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
         
+        <!-- Bài viết tĩnh ban đầu -->
         <a href="pho-bo-bao-nhieu-calo.html" style="text-decoration: none;">
           <div class="quick-food-btn" style="padding: 1rem;">
             <h3 style="font-size: 1.05rem; color: #fff; margin-bottom: 0.3rem;">🍜 Phở Bò Bao Nhiêu Calo?</h3>
@@ -144,5 +145,26 @@
     </div>
   </footer>
 
+  <script>
+    // Tự động load danh sách tất cả các bài đã xuất bản từ API
+    fetch('/api/approve-draft')
+      .then(res => res.json())
+      .then(data => {
+        const queue = data.queue || [];
+        const published = queue.filter(item => item.status === 'published');
+        const container = document.getElementById('published-articles-grid');
+        if (container && published.length > 0) {
+          container.innerHTML = published.map(item => `
+            <a href="${item.publishedSlug}" style="text-decoration: none;">
+              <div class="quick-food-btn" style="padding: 1rem;">
+                <h3 style="font-size: 1.05rem; color: #fff; margin-bottom: 0.3rem;">🍜 ${item.topic} Bao Nhiêu Calo?</h3>
+                <p style="font-size: 0.8rem; color: var(--text-muted);">Phân tích dinh dưỡng ${item.primaryKeyword} chuẩn y khoa Viện Dinh Dưỡng Quốc Gia.</p>
+              </div>
+            </a>
+          `).join('');
+        }
+      })
+      .catch(err => console.log('Dynamically loading articles:', err));
+  </script>
 </body>
 </html>
