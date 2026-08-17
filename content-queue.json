@@ -289,7 +289,9 @@
         "bột chiên 2 trứng calo"
       ],
       "category": "a",
-      "status": "pending"
+      "status": "published",
+      "publishedSlug": "bot-chien-bao-nhieu-calo.html",
+      "publishedAt": "2026-08-17"
     },
     {
       "id": "topic-023",
@@ -300,7 +302,9 @@
         "nước mắm chua ngọt calo"
       ],
       "category": "a",
-      "status": "pending"
+      "status": "published",
+      "publishedSlug": "bun-thit-nuong-bao-nhieu-calo.html",
+      "publishedAt": "2026-08-17"
     },
     {
       "id": "topic-024",
@@ -311,7 +315,9 @@
         "cơm chiên hải sản calo"
       ],
       "category": "a",
-      "status": "pending"
+      "status": "published",
+      "publishedSlug": "com-chien-bao-nhieu-calo.html",
+      "publishedAt": "2026-08-17"
     },
     {
       "id": "topic-025",
@@ -322,7 +328,9 @@
         "bánh bò nước cốt dừa calo"
       ],
       "category": "a",
-      "status": "pending"
+      "status": "published",
+      "publishedSlug": "banh-bo-bao-nhieu-calo.html",
+      "publishedAt": "2026-08-17"
     },
     {
       "id": "topic-026",
@@ -333,7 +341,9 @@
         "nước lẩu chua cay calo"
       ],
       "category": "a",
-      "status": "pending"
+      "status": "published",
+      "publishedSlug": "lau-thai-bao-nhieu-calo.html",
+      "publishedAt": "2026-08-17"
     },
     {
       "id": "topic-027",
