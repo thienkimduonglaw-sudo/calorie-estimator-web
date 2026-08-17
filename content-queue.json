@@ -484,7 +484,9 @@
         "bún ốc chuối đậu calo"
       ],
       "category": "a",
-      "status": "pending"
+      "status": "published",
+      "publishedSlug": "bun-oc-bao-nhieu-calo.html",
+      "publishedAt": "2026-08-17"
     },
     {
       "id": "topic-038",
@@ -495,7 +497,9 @@
         "bánh tét chiên calo"
       ],
       "category": "a",
-      "status": "pending"
+      "status": "published",
+      "publishedSlug": "banh-tet-bao-nhieu-calo.html",
+      "publishedAt": "2026-08-17"
     },
     {
       "id": "topic-039",
@@ -506,7 +510,9 @@
         "miến trộn măng gà calo"
       ],
       "category": "a",
-      "status": "pending"
+      "status": "published",
+      "publishedSlug": "mien-ga-bao-nhieu-calo.html",
+      "publishedAt": "2026-08-17"
     },
     {
       "id": "topic-040",
@@ -517,7 +523,9 @@
         "miến lươn nước calo"
       ],
       "category": "a",
-      "status": "pending"
+      "status": "published",
+      "publishedSlug": "mien-luon-bao-nhieu-calo.html",
+      "publishedAt": "2026-08-17"
     },
     {
       "id": "topic-041",
@@ -528,7 +536,9 @@
         "phở chiên phồng calo"
       ],
       "category": "a",
-      "status": "pending"
+      "status": "published",
+      "publishedSlug": "pho-cuon-bao-nhieu-calo.html",
+      "publishedAt": "2026-08-17"
     },
     {
       "id": "topic-042",
