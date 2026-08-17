@@ -224,7 +224,9 @@
         "lòng heo luộc calo"
       ],
       "category": "a",
-      "status": "pending"
+      "status": "published",
+      "publishedSlug": "chao-long-bao-nhieu-calo.html",
+      "publishedAt": "2026-08-17"
     },
     {
       "id": "topic-018",
@@ -235,7 +237,9 @@
         "bún mắm hải sản calo"
       ],
       "category": "a",
-      "status": "pending"
+      "status": "published",
+      "publishedSlug": "bun-mam-bao-nhieu-calo.html",
+      "publishedAt": "2026-08-17"
     },
     {
       "id": "topic-019",
@@ -246,7 +250,9 @@
         "bánh tráng phô mai calo"
       ],
       "category": "a",
-      "status": "pending"
+      "status": "published",
+      "publishedSlug": "banh-trang-nuong-bao-nhieu-calo.html",
+      "publishedAt": "2026-08-17"
     },
     {
       "id": "topic-020",
@@ -257,7 +263,9 @@
         "bánh tráng bơ calo"
       ],
       "category": "a",
-      "status": "pending"
+      "status": "published",
+      "publishedSlug": "banh-trang-tron-bao-nhieu-calo.html",
+      "publishedAt": "2026-08-17"
     },
     {
       "id": "topic-021",
@@ -268,7 +276,9 @@
         "nem rán hải sản calo"
       ],
       "category": "a",
-      "status": "pending"
+      "status": "published",
+      "publishedSlug": "cha-gio-bao-nhieu-calo.html",
+      "publishedAt": "2026-08-17"
     },
     {
       "id": "topic-022",
